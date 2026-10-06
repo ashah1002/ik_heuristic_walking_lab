@@ -24,6 +24,7 @@ np.set_printoptions(precision=3, suppress=True)
 Kp = 3
 Kd = 0.1
 
+GUESS = None
 
 class InverseKinematics(Node):
 
@@ -43,7 +44,7 @@ class InverseKinematics(Node):
         )
 
         self.pd_timer_period = 1.0 / 200  # 200 Hz
-        self.ik_timer_period = 1.0 / 20   # 20 Hz
+        self.ik_timer_period = 1.0 / 20  # 20 Hz
         self.pd_timer = self.create_timer(self.pd_timer_period, self.pd_timer_callback)
         self.ik_timer = self.create_timer(self.ik_timer_period, self.ik_timer_callback)
 
@@ -75,29 +76,28 @@ class InverseKinematics(Node):
         ################################################################################################
 
         state = t % 3
-        if state < 1:
-            position = (1 + state) * self.ee_triangle_positions[0] + state * self.ee_triangle_positions[1]
-        elif state < 2:
-            position = (1 + state) * self.ee_triangle_positions[1] + state * self.ee_triangle_positions[2]
-        else:
-            position = (1 + state) * self.ee_triangle_positions[2] + state * self.ee_triangle_positions[0]
-        return position
-
-
-
-     
+        i = int(state)                # which edge: 0, 1, or 2
+        alpha = state - i             # fraction along that edge
+        start = self.ee_triangle_positions[i]
+        end = self.ee_triangle_positions[(i + 1) % 3]
+        return (1 - alpha) * start + alpha * end
 
     def ik_timer_callback(self):
         if self.joint_positions is not None:
             target_ee = self.interpolate_triangle(self.t)
-            self.target_joint_positions = inverse_kinematics(fr_leg_fk, target_ee, self.joint_positions)
+            if GUESS is None:
+                guess = self.joint_positions
+            else:
+                guess = GUESS
+            print('using guess', guess)
+            self.target_joint_positions = inverse_kinematics(fr_leg_fk, target_ee, guess)
             current_ee = fr_leg_fk(self.joint_positions)
 
             # update the current time for the triangle interpolation
             ################################################################################################
             # TODO 6: Implement the time update
             ################################################################################################
-
+            self.t += self.ik_timer_period
             self.get_logger().info(f'Target EE: {target_ee}, Current EE: {current_ee}, Target Angles: {self.target_joint_positions}, Target Angles to EE: {fr_leg_fk(self.target_joint_positions)}, Current Angles: {self.joint_positions}')
 
     def pd_timer_callback(self):

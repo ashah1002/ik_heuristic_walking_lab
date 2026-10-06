@@ -250,7 +250,7 @@ def inverse_kinematics(leg_fk, target_ee, initial_guess=(0, 0, 0),
     theta = np.array(initial_guess, dtype=float)
     for _ in range(max_iterations):
         _, l1 = cost_function(theta)
-        if np.linalg.norm(l1) < tolerance:
+        if np.mean(np.abs(l1)) < tolerance:
             break
         theta -= learning_rate * gradient(theta)
     return theta

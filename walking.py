@@ -30,8 +30,22 @@ from kinematics import LEG_FK, inverse_kinematics
 
 np.set_printoptions(precision=3, suppress=True)
 
+# Which gait to run: 'slow' or 'fast'.
+GAIT = 'fast'
+
+# step:    half the stride length (foot moves from +step to -step during stance), m
+# swing_z: foot height at mid-swing, m       stand_z: foot height during stance, m
+# com_dx:  shifts every foot in x (moves the support polygon relative to the CoM), m
+# back_x:  x offset of the back feet, m      period:  ik_timer_period, s per cache frame
+#          (one gait cycle = 50 frames, so cycle time = 50 * period)
+GAITS = {
+    'slow': dict(step=0.03, swing_z=-0.08, stand_z=-0.14, com_dx=0.0, back_x=-0.11, period=1 / 50),   # 1.00 s cycle
+    'fast': dict(step=0.06, swing_z=-0.10, stand_z=-0.13, com_dx=0.0, back_x=-0.10, period=1 / 150),  # 0.33 s cycle
+}
+
+# One cache file per gait, so --use-cache never replays the other gait.
 CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          'joint_positions_cache.npz')
+                          f'joint_positions_cache_{GAIT}.npz')
 
 
 class InverseKinematics(Node):
@@ -58,41 +72,58 @@ class InverseKinematics(Node):
 
         # Keyframes of a single leg's cycle, in the leg's own frame. The per-leg
         # offsets below place them under the correct hip.
-        touch_down_position = np.array([0.05, 0.0, -0.14])
-        stand_position_1 = np.array([0.025, 0.0, -0.14])
-        stand_position_2 = np.array([0.0, 0.0, -0.14])
-        stand_position_3 = np.array([-0.025, 0.0, -0.14])
-        liftoff_position = np.array([-0.05, 0.0, -0.14])
-        mid_swing_position = np.array([0.0, 0.0, -0.05])
+        g = GAITS[GAIT]
+        print(f'Gait: {GAIT} {g}')
+
+        touch_down_position = np.array([g['step'], 0.0, g['stand_z']])
+        stand_position_1 = np.array([g['step'] / 2, 0.0, g['stand_z']])
+        stand_position_2 = np.array([0.0, 0.0, g['stand_z']])
+        stand_position_3 = np.array([-g['step'] / 2, 0.0, g['stand_z']])
+        liftoff_position = np.array([-g['step'], 0.0, g['stand_z']])
+        mid_swing_position = np.array([0.0, 0.0, g['swing_z']])
 
         ## trotting
         # TODO 7: Implement each leg's trajectory in the trotting gait.
-        rf_ee_offset = np.array([0.06, -0.09, 0])
+        # Diagonal pairs move together: RF + LB start at touchdown, LF + RB are
+        # shifted by three keyframes (half a cycle).
+        rf_ee_offset = np.array([0.06 + g['com_dx'], -0.09, 0])
         rf_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO 7: Implement the trotting gait
-            ################################################################################################
+            touch_down_position,
+            stand_position_1,
+            stand_position_2,
+            stand_position_3,
+            liftoff_position,
+            mid_swing_position,
         ]) + rf_ee_offset
 
-        lf_ee_offset = np.array([0.06, 0.09, 0])
+        lf_ee_offset = np.array([0.06 + g['com_dx'], 0.09, 0])
         lf_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO 7: Implement the trotting gait
-            ################################################################################################
+            stand_position_3,
+            liftoff_position,
+            mid_swing_position,
+            touch_down_position,
+            stand_position_1,
+            stand_position_2,
         ]) + lf_ee_offset
 
-        rb_ee_offset = np.array([-0.11, -0.09, 0])
+        rb_ee_offset = np.array([g['back_x'] + g['com_dx'], -0.09, 0])
         rb_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO 7: Implement the trotting gait
-            ################################################################################################
+            stand_position_3,
+            liftoff_position,
+            mid_swing_position,
+            touch_down_position,
+            stand_position_1,
+            stand_position_2,
         ]) + rb_ee_offset
 
-        lb_ee_offset = np.array([-0.11, 0.09, 0])
+        lb_ee_offset = np.array([g['back_x'] + g['com_dx'], 0.09, 0])
         lb_ee_triangle_positions = np.array([
-            ################################################################################################
-            # TODO 7: Implement the trotting gait
-            ################################################################################################
+            touch_down_position,
+            stand_position_1,
+            stand_position_2,
+            stand_position_3,
+            liftoff_position,
+            mid_swing_position,
         ]) + lb_ee_offset
 
         self.ee_triangle_positions = [rf_ee_triangle_positions, lf_ee_triangle_positions, rb_ee_triangle_positions, lb_ee_triangle_positions]
@@ -108,7 +139,7 @@ class InverseKinematics(Node):
         print(f'shape of target_ee_cache: {self.target_ee_cache.shape}')
 
         self.pd_timer_period = 1.0 / 200  # 200 Hz
-        self.ik_timer_period = 1.0 / 100  # 100 Hz
+        self.ik_timer_period = g['period']  # set by GAIT (slow: 50 Hz, fast: 150 Hz)
         self.pd_timer = self.create_timer(self.pd_timer_period, self.pd_timer_callback)
         self.ik_timer = self.create_timer(self.ik_timer_period, self.ik_timer_callback)
 
@@ -131,8 +162,12 @@ class InverseKinematics(Node):
         # Unlike in ik.py, t is a float between 0 and 1 covering one full gait cycle, and each leg has
         # six keyframes instead of three.
         ################################################################################################
-
-        return
+        positions = self.ee_triangle_positions[leg_index]
+        n = len(positions)                 # 6 keyframes
+        s = (t % 1.0) * n                  # position in keyframe units, 0 to 6
+        i = int(s) % n                     # current edge
+        alpha = s - int(s)                 # fraction along it
+        return (1 - alpha) * positions[i] + alpha * positions[(i + 1) % n]
 
     def cache_target_joint_positions(self):
         # Calculate and store the target joint positions for a cycle and all 4 legs
