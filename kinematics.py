@@ -213,7 +213,7 @@ LEG_FK = [fr_leg_fk, fl_leg_fk, br_leg_fk, bl_leg_fk]
 
 
 def inverse_kinematics(leg_fk, target_ee, initial_guess=(0, 0, 0),
-                       learning_rate=None, max_iterations=None, tolerance=None):
+                       learning_rate=30.0, max_iterations=1000, tolerance=1e-4):
     """Joint angles that put leg_fk's foot at target_ee, found by gradient descent.
 
     leg_fk is one of the FK functions above, so the same solver works for every leg.
@@ -222,6 +222,7 @@ def inverse_kinematics(leg_fk, target_ee, initial_guess=(0, 0, 0),
     # TODO 4: Set default values for learning_rate, max_iterations, and tolerance in the
     # signature above. Tolerance is in meters. walking.py overrides max_iterations and tolerance.
     ################################################################################################
+    target_ee = np.asarray(target_ee, dtype=float)
 
     def cost_function(theta):
         # Compute the cost function and the L1 error vector
@@ -229,33 +230,30 @@ def inverse_kinematics(leg_fk, target_ee, initial_guess=(0, 0, 0),
         ################################################################################################
         # TODO 2: Implement the cost function using leg_fk
         ################################################################################################
-        return None, None
+        l1 = target_ee - leg_fk(theta)
+        return np.sum(np.square(l1)), l1
 
     def gradient(theta, epsilon=1e-3):
         # Compute the gradient of the cost function using finite differences
         ################################################################################################
         # TODO 3: Implement the gradient computation
         ################################################################################################
-        return
+        grads = np.zeros_like(theta)
+        for i in range(theta.shape[0]):
+            step = np.zeros_like(theta)
+            step[i] = epsilon
+            cost_plus, _ = cost_function(theta + step)
+            cost_minus, _ = cost_function(theta - step)
+            grads[i] = (cost_plus - cost_minus) / (2 * epsilon)
+        return grads
 
-    theta = np.array(initial_guess).astype(np.float64)
-
-    cost_l = []
+    theta = np.array(initial_guess, dtype=float)
     for _ in range(max_iterations):
-        grad = gradient(theta)
-
-        # Update the theta (parameters) using the gradient and the learning rate
-        ################################################################################################
-        # TODO 4: Implement the gradient update. Use the cost function you implemented, and use tolerance
-        # to determine if IK has converged
-        # TODO (BONUS): Implement the (quasi-)Newton's method instead of finite differences for faster
-        # convergence
-        ################################################################################################
-
-    # print(f'Cost: {cost_l}') # Use to debug to see if your cost function converges within max_iterations
-
+        _, l1 = cost_function(theta)
+        if np.linalg.norm(l1) < tolerance:
+            break
+        theta -= learning_rate * gradient(theta)
     return theta
-
 
 if __name__ == '__main__':
     np.set_printoptions(precision=4, suppress=True)

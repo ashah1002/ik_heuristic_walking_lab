@@ -73,7 +73,19 @@ class InverseKinematics(Node):
         ################################################################################################
         # TODO 5: Implement the interpolation function
         ################################################################################################
-        return
+
+        state = t % 3
+        if state < 1:
+            position = (1 + state) * self.ee_triangle_positions[0] + state * self.ee_triangle_positions[1]
+        elif state < 2:
+            position = (1 + state) * self.ee_triangle_positions[1] + state * self.ee_triangle_positions[2]
+        else:
+            position = (1 + state) * self.ee_triangle_positions[2] + state * self.ee_triangle_positions[0]
+        return position
+
+
+
+     
 
     def ik_timer_callback(self):
         if self.joint_positions is not None:
