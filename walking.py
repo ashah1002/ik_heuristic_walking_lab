@@ -33,14 +33,9 @@ np.set_printoptions(precision=3, suppress=True)
 # Which gait to run: 'slow' or 'fast'.
 GAIT = 'fast'
 
-# step:    half the stride length (foot moves from +step to -step during stance), m
-# swing_z: foot height at mid-swing, m       stand_z: foot height during stance, m
-# com_dx:  shifts every foot in x (moves the support polygon relative to the CoM), m
-# back_x:  x offset of the back feet, m      period:  ik_timer_period, s per cache frame
-#          (one gait cycle = 50 frames, so cycle time = 50 * period)
 GAITS = {
-    'slow': dict(step=0.03, swing_z=-0.08, stand_z=-0.14, com_dx=0.0, back_x=-0.11, period=1 / 50),   # 1.00 s cycle
-    'fast': dict(step=0.06, swing_z=-0.10, stand_z=-0.13, com_dx=0.0, back_x=-0.10, period=1 / 150),  # 0.33 s cycle
+    'slow': dict(step=0.03, swing_z=-0.08, stand_z=-0.14, com_dx=0.0, back_x=-0.11, period=1 / 50),
+    'fast': dict(step=0.06, swing_z=-0.10, stand_z=-0.13, com_dx=0.0, back_x=-0.10, period=1 / 150),
 }
 
 # One cache file per gait, so --use-cache never replays the other gait.
